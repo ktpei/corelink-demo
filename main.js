@@ -145,14 +145,14 @@ function handleControl(control) {
       video.currentTime = control.time
       break
     case 'SYNC':
-      
-      const targetTime = (control.time + video.currentTime) / 2;
-      const currentPlayRate = video.playbackRate;
-      if (Math.abs(targetTime - video.currentTime) > 0.05) {
-        video.playbackRate = currentPlayRate * (targetTime/video.currentTime);
+      const diff = Math.abs(control.time - video.currentTime);
+      if (diff > 1.0 || video.currentTime < 1.0) {
+        video.currentTime = control.time;
+        video.playbackRate = 1.0;
+      } else if (diff > 0.02) {
+        video.playbackRate = Math.max(0.5, Math.min(2.0, control.time / video.currentTime));
       } else {
-        video.playbackRate = 1;
-        video.currentTime = targetTime;
+        video.playbackRate = 1.0;
       }
       break;
     default:
