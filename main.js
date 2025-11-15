@@ -1,73 +1,98 @@
-
-
+// Corelink Configuration
 const workspace = 'Holodeck'
 const protocol = 'ws'
 const datatype = 'testdata'
 
+const config = {
+  username: 'Testuser',
+  password: 'Testpassword',
+  host: 'corelink.hpc.nyu.edu',
+  port: 20012,
+}
+
+// Global stream references
+let sender = null
+let receiver = null
+
+// Helper functions
 function ab2str(buf) {
-    return String.fromCharCode.apply(null, new Uint8Array(buf))
+  return String.fromCharCode.apply(null, new Uint8Array(buf))
 }
 
 function str2ab(str) {
-    const buf = new ArrayBuffer(str.length)
-    const bufView = new Uint8Array(buf)
-    for (let i = 0; i < str.length; i += 1) {
-      bufView[i] = str.charCodeAt(i)
-    }
-    return buf
+  const buf = new ArrayBuffer(str.length)
+  const bufView = new Uint8Array(buf)
+  for (let i = 0; i < str.length; i += 1) {
+    bufView[i] = str.charCodeAt(i)
+  }
+  return buf
 }
 
+// Send message through Corelink
 function sendMessage(message) {
-    corelink.send(sender, str2ab(message))
+  if (!sender) {
+    console.error('Sender not initialized')
+    return
+  }
+  corelink.send(sender, str2ab(message))
+  console.log('Sent:', message)
 }
 
-
-  
-
+// Initialize Corelink connection
 async function run() {
-    const config = {
-        username: 'Testuser',
-        password: 'Testpassword',
-        host: 'corelink.hpc.nyu.edu',
-        port: 20012,
-        payload: 4096
-    }
-    if (await corelink.connect(
-        { username: config.username, password: config.password }, 
-        { ControlIP: config.host, ControlPort: config.port }
-    ).catch((e) => console.log(e))) {
+  try {
+    // Connect to Corelink server
+    const connected = await corelink.connect(
+      { username: config.username, password: config.password },
+      { ControlIP: config.host, ControlPort: config.port }
+    )
 
-    // This part creates the receiver.
+    if (!connected) {
+      console.error('Failed to connect to Corelink')
+      return
+    }
+
+    console.log('✅ Connected to Corelink')
+
+    // Create receiver
     receiver = await corelink.createReceiver({
-        workspace, protocol, type: datatype, echo: true, alert: true,
-    }).catch((err) => { console.log(err) })
-    // This part creates the sender.
+      workspace,
+      protocol,
+      type: datatype,
+      echo: true,
+      alert: true,
+    })
+    console.log('Receiver created:', receiver)
+
+    // Create sender
     sender = await corelink.createSender({
-        workspace,
-        protocol,
-        type: datatype,
-        // metadata: { name: 'Random Data' },
-    }).catch((err) => { console.log(err) })
+      workspace,
+      protocol,
+      type: datatype,
+    })
+    console.log('Sender created:', sender)
 
-    
-    corelink.on('receiver', (e) => console.log('receiver callback', e))
-    corelink.on('sender', (e) => console.log('sender callback', e))
-    corelink.on('stale', (e) => console.log('stale callback', e))
-    corelink.on('dropped', (e) => console.log('dropped callback', e))
-    
-    }
-    
+    // When a new receiver is created, subscribe to it
     corelink.on('receiver', async (data) => {
-        await corelink.subscribe([data.streamID])
+      console.log('New receiver available:', data)
+      await corelink.subscribe([data.streamID])
     })
 
-
+    // Handle incoming data
     corelink.on('data', (streamID, data) => {
-        console.log(ab2str(data))
-	document.getElementById("content").innerHTML = ab2str(data)
-
+      const message = ab2str(data)
+      console.log('Received:', message)
+      document.getElementById('content').innerHTML = message
     })
 
+    // Log other events
+    corelink.on('sender', (e) => console.log('Sender event:', e))
+    corelink.on('stale', (e) => console.log('Stale stream:', e))
+    corelink.on('dropped', (e) => console.log('Dropped stream:', e))
+  } catch (err) {
+    console.error('Error initializing Corelink:', err)
+  }
 }
 
+// Start the application
 run()
