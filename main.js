@@ -25,7 +25,6 @@ video.muted = true
 function ab2str(buf) {
   return String.fromCharCode.apply(null, new Uint8Array(buf))
 }
-
 function str2ab(str) {
   const buf = new ArrayBuffer(str.length)
   const bufView = new Uint8Array(buf)
@@ -122,9 +121,11 @@ async function connectCorelink() {
       }
     });
 
+
   
   } catch (err) {
     console.error('Error initializing Corelink:', err)
+    alert('Failed to connect to Corelink. Check console for details.')
   }
 }
 
@@ -150,7 +151,7 @@ function handleControl(control) {
       if (Math.abs(targetTime - video.currentTime) > 0.05) {
         video.playbackRate = currentPlayRate * (targetTime/video.currentTime);
       } else {
-        video.playbackRate = currentPlayRate;
+        video.playbackRate = 1;
         video.currentTime = targetTime;
       }
       break;
@@ -186,13 +187,32 @@ function attachVideoListeners() {
     }, 1000);
 }
 
-function handleDisconnect() {
-  corelink.disconnect()
-  console.log('Disconnected from Corelink')
-  video.pause()
-  video.currentTime = 0
-  video.playbackRate = 1
+// Disconnect from Corelink
+async function handleDisconnect() {
+  try {
+    // Disconnect from our workspace and type
+    const result = await corelink.disconnect({
+      workspaces: workspace,
+      types: datatype
+    })
+    
+    console.log('Disconnected from Corelink:', result)
+    
+    // Reset stream references
+    sender = null
+    receiver = null
+    
+    // Reset video state
+    video.pause()
+    video.currentTime = 0
+    video.playbackRate = 1
+    
+    alert('Disconnected from Corelink')
+  } catch (err) {
+    console.error('Error disconnecting:', err)
+  }
 }
+
 // Start the application
 attachVideoListeners()
 connectCorelink()
