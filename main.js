@@ -35,14 +35,14 @@ function str2ab(str) {
 }
 
 // Send message through Corelink
-function sendMessage(message) {
-  if (!sender) {
-    console.error('Sender not initialized')
-    return
-  }
-  corelink.send(sender, str2ab(message))
-  console.log('Sent:', message)
-}
+// function sendMessage(message) {
+//   if (!sender) {
+//     console.error('Sender not initialized')
+//     return
+//   }
+//   corelink.send(sender, str2ab(message))
+//   console.log('Sent:', message)
+// }
 
 // Second video controls over Corelink
 function sendControl(action, payload = {}) {
@@ -148,7 +148,7 @@ async function handleControl(control) {
     switch (control.action) {
       case 'PLAY':
         video.currentTime = control.time ?? video.currentTime;
-        await video.play().catch(e => console.error('Play failed:', e));
+        video.play();
         break;
       case 'PAUSE':
         video.currentTime = control.time ?? video.currentTime;
@@ -158,16 +158,17 @@ async function handleControl(control) {
         video.currentTime = control.time;
         break;
       case 'SYNC':
-        // const diff = Math.abs(control.time - video.currentTime);
+        // const targetTime = (video.currentTime + control.time) / 2;
+        // diff = Math.abs(targetTime - video.currentTime);
         // if (diff > 1.0 || video.currentTime < 1.0) {
         //   video.currentTime = control.time;
         //   video.playbackRate = 1.0;
         // } else if (diff > 0.02) {
-        //   video.playbackRate = Math.max(0.5, Math.min(2.0, control.time / video.currentTime));
+        //   video.playbackRate = targetTime / video.currentTime;
         // } else {
         //   video.playbackRate = 1.0;
         // }
-        break;
+        // break;
       default:
         console.log('Unknown action:', control.action);
     }
@@ -177,7 +178,7 @@ async function handleControl(control) {
     // Use finally to ensure flag is always reset
     setTimeout(() => {
       suppressBroadcast = false;
-    }, 50);
+    }, 100);
   }
 }
 
