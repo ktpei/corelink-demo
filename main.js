@@ -61,108 +61,124 @@ function sendControl(action, payload = {}) {
 }
 
 // Initialize Corelink connection
-async function connectCorelink() {
+async function connectCorelink() {  
   try {
     // Connect to Corelink server
-    const connected = await corelink
-      .connect(
-        { username: config.username, password: config.password },
-        { ControlIP: config.host, ControlPort: config.port }
-      )
-      .catch((e) => {
-        console.error('Failed to connect to Corelink:', e)
-        return false
-      });
+    const connected = await corelink.connect(
+      { username: config.username, password: config.password },
+      { ControlIP: config.host, ControlPort: config.port }
+    );
     
-    console.log('Connected to Corelink', connected)
+    if (!connected) {
+      throw new Error('Connection returned false');
+    }
+    
+    console.log('Connected to Corelink', connected);
 
     // Create receiver
-    receiver = await corelink
-      .createReceiver({
-        workspace,
-        protocol,
-        type: datatype,
-        echo: true,
-        alert: true,
-      })
-      .catch((e) => {
-        console.error('Failed to create receiver:', e)
-        return false
-      });
+    receiver = await corelink.createReceiver({
+      workspace,
+      protocol,
+      type: datatype,
+      echo: true,
+      alert: true,
+    });
+    
+    if (!receiver) {
+      throw new Error('Failed to create receiver');
+    }
 
     // Create sender
-    sender = await corelink
-      .createSender({
-        workspace,
-        protocol,
-        type: datatype,
-      })
-      .catch((e) => {
-        console.error('Failed to create sender:', e)
-        return false
-      });
+    sender = await corelink.createSender({
+      workspace,
+      protocol,
+      type: datatype,
+    });
+    
+    if (!sender) {
+      throw new Error('Failed to create sender');
+    }
 
     // When a new receiver is created, subscribe to it
     corelink.on('receiver', async (data) => {
-      console.log('New receiver available:', data)
-      await corelink.subscribe([data.streamID])
-    })
+      console.log('New receiver available:', data);
+      try {
+        await corelink.subscribe([data.streamID]);
+      } catch (e) {
+        console.error('Failed to subscribe to receiver:', e);
+      }
+    });
 
     // Handle incoming data
     corelink.on('data', (streamID, buf) => {
-      const message = ab2str(buf)
-      console.log('Received:', message)
-    // document.getElementById('content').innerHTML = message
+      const message = ab2str(buf);
+      console.log('Received:', message);
       try {
         const control = JSON.parse(message);
         handleControl(control);
       } catch (e) {
-        console.error('Failed to parse control:', e)
+        console.error('Failed to parse control:', e);
       }
     });
 
 
-  
-  } catch (err) {
-    console.error('Error initializing Corelink:', err)
-    alert('Failed to connect to Corelink. Check console for details.')
+    
+  } catch (e) {
+    console.error('Failed to connect to Corelink:', e);
+    connectionState = 'error';
+    
+    // Cleanup partial state
+    if (sender) {
+      sender = null;
+    }
+    if (receiver) {
+      receiver = null;
+    }
+    
+    alert('Failed to connect. Please refresh and try again.');
+    return false;
   }
 }
 
-function handleControl(control) {
-  console.log('Received control:', control)
+async function handleControl(control) {
+  console.log('Received control:', control);
   suppressBroadcast = true;
-  switch (control.action) {
-    case 'PLAY':
-      video.currentTime = control.time ?? video.currentTime;
-      video.play();
-      break
-    case 'PAUSE':
-      video.currentTime = control.time ?? video.currentTime;
-      video.pause()
-      break
-    case 'SEEK':
-      video.currentTime = control.time
-      break
-    case 'SYNC':
-      const diff = Math.abs(control.time - video.currentTime);
-      if (diff > 1.0 || video.currentTime < 1.0) {
+  
+  try {
+    switch (control.action) {
+      case 'PLAY':
+        video.currentTime = control.time ?? video.currentTime;
+        await video.play().catch(e => console.error('Play failed:', e));
+        break;
+      case 'PAUSE':
+        video.currentTime = control.time ?? video.currentTime;
+        video.pause();
+        break;
+      case 'SEEK':
         video.currentTime = control.time;
-        video.playbackRate = 1.0;
-      } else if (diff > 0.02) {
-        video.playbackRate = Math.max(0.5, Math.min(2.0, control.time / video.currentTime));
-      } else {
-        video.playbackRate = 1.0;
-      }
-      break;
-    default:
-      console.log('Unknown action:', control.action)
+        break;
+      case 'SYNC':
+        // const diff = Math.abs(control.time - video.currentTime);
+        // if (diff > 1.0 || video.currentTime < 1.0) {
+        //   video.currentTime = control.time;
+        //   video.playbackRate = 1.0;
+        // } else if (diff > 0.02) {
+        //   video.playbackRate = Math.max(0.5, Math.min(2.0, control.time / video.currentTime));
+        // } else {
+        //   video.playbackRate = 1.0;
+        // }
+        break;
+      default:
+        console.log('Unknown action:', control.action);
+    }
+  } catch (e) {
+    console.error('Failed to handle control:', e);
+  } finally {
+    // Use finally to ensure flag is always reset
+    setTimeout(() => {
+      suppressBroadcast = false;
+    }, 50);
   }
-
-  // prevents echo loop
-  setTimeout(() => {
-    suppressBroadcast = false;
-  }, 100);
 }
 
 function attachVideoListeners() {
@@ -189,30 +205,37 @@ function attachVideoListeners() {
 
 // Disconnect from Corelink
 async function handleDisconnect() {
-  try {
+  try {    
     // Disconnect from our workspace and type
     const result = await corelink.disconnect({
       workspaces: workspace,
       types: datatype
-    })
+    });
     
-    console.log('Disconnected from Corelink:', result)
+    console.log('Disconnected from Corelink:', result);
     
     // Reset stream references
-    sender = null
-    receiver = null
+    sender = null;
+    receiver = null;
     
     // Reset video state
-    video.pause()
-    video.currentTime = 0
-    video.playbackRate = 1
+    video.pause();
+    video.currentTime = 0;
+    video.playbackRate = 1;
     
-    alert('Disconnected from Corelink')
-  } catch (err) {
-    console.error('Error disconnecting:', err)
+    alert('Disconnected from Corelink');
+  } catch (e) {
+    console.error('Failed to disconnect from Corelink:', e);
   }
 }
 
 // Start the application
-attachVideoListeners()
-connectCorelink()
+attachVideoListeners();
+(async () => {
+  const connected = await connectCorelink();
+  if (connected) {
+    console.log('Application ready');
+  } else {
+    console.error('Failed to initialize application');
+  }
+})();
