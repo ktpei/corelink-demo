@@ -158,17 +158,28 @@ async function handleControl(control) {
         video.currentTime = control.time;
         break;
       case 'SYNC':
-        // const targetTime = (video.currentTime + control.time) / 2;
-        // diff = Math.abs(targetTime - video.currentTime);
-        // if (diff > 1.0 || video.currentTime < 1.0) {
-        //   video.currentTime = control.time;
-        //   video.playbackRate = 1.0;
-        // } else if (diff > 0.02) {
-        //   video.playbackRate = targetTime / video.currentTime;
-        // } else {
-        //   video.playbackRate = 1.0;
-        // }
-        // break;
+        // Calculate network latency and expected time
+        const latency = (Date.now() - control.sentAt) / 1000; // Convert to seconds
+        const expectedTime = control.time + latency;
+        const drift = expectedTime - video.currentTime;
+        
+        // Large drift (>1 second): Jump immediately to sync
+        if (Math.abs(drift) > 1.0) {
+          video.currentTime = expectedTime;
+          video.playbackRate = 1.0;
+        } 
+        // Moderate drift (>50ms): Adjust playback speed to gradually catch up
+        else if (Math.abs(drift) > 0.05) {
+          // Speed up/slow down by up to 10% to catch up
+          video.playbackRate = 1.0 + (drift * 0.5);
+          // Clamp playback rate to reasonable bounds
+          video.playbackRate = Math.max(0.9, Math.min(1.1, video.playbackRate));
+        } 
+        // Small drift (<50ms): Reset to normal speed, good enough sync
+        else {
+          video.playbackRate = 1.0;
+        }
+        break;
       default:
         console.log('Unknown action:', control.action);
     }
